@@ -8,7 +8,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from PIL import Image, UnidentifiedImageError
-from analyser_combined import CardAnalyser, CenteringResult
+from analyser import CardAnalyser, CenteringResult
 import numpy as np
 import cv2
 
