@@ -806,7 +806,16 @@
           <div class="form-group"><label for="lname">Last Name</label><input type="text" id="lname" placeholder="Ketchum" /></div>
         </div>
         <div class="form-group"><label for="email">Email</label><input type="email" id="email" placeholder="ash@pokemoncenter.ca" /></div>
-        <div class="form-group"><label for="inquiry">What are you looking for?</label><select id="inquiry"><option value="">Select an option…</option><option>I want to buy a specific card</option><option>I want to sell my collection</option><option>I have a trade offer</option><option>Other / General question</option></select></div>
+        <div class="form-group">
+          <label for="inquiry">What are you looking for?</label>
+          <select id="inquiry" onchange="updateMessageTemplate()">
+            <option value="">Select an option…</option>
+            <option value="buy">I want to buy a specific card</option>
+            <option value="sell">I want to sell my collection</option>
+            <option value="trade">I have a trade offer</option>
+            <option value="other">Other / General question</option>
+          </select>
+        </div>
         <div class="form-group"><label for="message">Message</label><textarea id="message" placeholder="Tell us what you're after..."></textarea></div>
         <button class="form-submit" id="formSubmitBtn" onclick="handleSubmit()">Send Message →</button>
       </div>
@@ -874,15 +883,15 @@
   loadFeatured();
 
   // Holo card tilt
-  const card = document.getElementById('holoCard');
+  const holoCard = document.getElementById('holoCard');
   document.addEventListener('mousemove', e => {
-    if (!card) return;
-    const rect = card.getBoundingClientRect();
+    if (!holoCard) return;
+    const rect = holoCard.getBoundingClientRect();
     const dx = (e.clientX - (rect.left + rect.width / 2)) / window.innerWidth;
     const dy = (e.clientY - (rect.top + rect.height / 2)) / window.innerHeight;
-    card.style.transform = `perspective(600px) rotateY(${dx * 20}deg) rotateX(${-dy * 20}deg)`;
+    holoCard.style.transform = `perspective(600px) rotateY(${dx * 20}deg) rotateX(${-dy * 20}deg)`;
   });
-  document.addEventListener('mouseleave', () => { if (card) card.style.transform = 'perspective(600px) rotateY(0deg) rotateX(0deg)'; });
+  document.addEventListener('mouseleave', () => { if (holoCard) holoCard.style.transform = 'perspective(600px) rotateY(0deg) rotateX(0deg)'; });
 
   // Scroll reveal
   const observer = new IntersectionObserver(entries => {
@@ -892,13 +901,53 @@
     el.style.opacity = '0'; el.style.transform = 'translateY(24px)'; el.style.transition = 'opacity 0.5s ease, transform 0.5s ease'; observer.observe(el);
   });
 
+  // ── MESSAGE TEMPLATES ──
+  const messageTemplates = {
+    buy: `Hi! I would like to purchase [Pokemon name and ID number], from [set]. Can you please check if you have it?`,
+    sell: `Hi! I have a collection of Pokemon cards, approximately valued [$ amount], and I [would like to, or would NOT like to take trades], and I am hoping for approximately [X percentage]. Please let me know if you are open to negotiations!`,
+    trade: `Hi! I am interested in the following card(s): [input cards of interest], and I have the following cards for trade: [input cards here]`,
+    other: ''
+  };
+
+  function updateMessageTemplate() {
+    const inquiry = document.getElementById('inquiry').value;
+    const messageBox = document.getElementById('message');
+    const template = messageTemplates[inquiry] || '';
+    
+    const currentMsg = messageBox.value.trim();
+    const isTemplate = Object.values(messageTemplates).some(t => t && currentMsg === t);
+    
+    if (!currentMsg || isTemplate) {
+      messageBox.value = template;
+      if (template) {
+        messageBox.style.color = 'var(--text-muted)';
+        messageBox.style.fontStyle = 'italic';
+      }
+    }
+  }
+
+  document.getElementById('message').addEventListener('focus', function() {
+    const inquiry = document.getElementById('inquiry').value;
+    const template = messageTemplates[inquiry] || '';
+    if (this.value === template) {
+      this.style.color = 'var(--text)';
+      this.style.fontStyle = 'normal';
+    }
+  });
+
+  document.getElementById('message').addEventListener('input', function() {
+    this.style.color = 'var(--text)';
+    this.style.fontStyle = 'normal';
+  });
+
   // Contact form
   async function handleSubmit() {
     const btn = document.getElementById('formSubmitBtn');
     const fname = document.getElementById('fname').value.trim();
     const lname = document.getElementById('lname').value.trim();
     const email = document.getElementById('email').value.trim();
-    const inquiry = document.getElementById('inquiry').value;
+    const inquirySelect = document.getElementById('inquiry');
+    const inquiryText = inquirySelect.options[inquirySelect.selectedIndex].text;
     const message = document.getElementById('message').value.trim();
     if (!fname || !email || !message) {
       btn.textContent = 'Please fill in required fields'; btn.style.background = '#c0392b';
@@ -909,11 +958,13 @@
     try {
       const res = await fetch('https://formspree.io/f/xjgqovkw', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ first_name: fname, last_name: lname, email, inquiry, message })
+        body: JSON.stringify({ first_name: fname, last_name: lname, email, inquiry: inquiryText, message })
       });
       if (res.ok) {
         btn.textContent = '✓ Message Sent!'; btn.style.background = '#2d6a4f';
         document.getElementById('fname').value = ''; document.getElementById('lname').value = ''; document.getElementById('email').value = ''; document.getElementById('inquiry').value = ''; document.getElementById('message').value = '';
+        document.getElementById('message').style.color = 'var(--text)';
+        document.getElementById('message').style.fontStyle = 'normal';
         setTimeout(() => { btn.textContent = 'Send Message →'; btn.style.background = ''; btn.disabled = false; }, 4000);
       } else throw new Error('Failed');
     } catch(e) {
