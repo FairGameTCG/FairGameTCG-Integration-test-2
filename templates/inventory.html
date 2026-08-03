@@ -652,7 +652,7 @@
 <body>
 
 <nav>
-  <a href="index.html" class="nav-logo">Fair Game <span>TCG</span></a>
+  <a href="/" class="nav-logo">Fair Game <span>TCG</span></a>
   <div style="display:flex;align-items:center;gap:1.5rem;">
     <a href="/" class="nav-back">← Back to Home</a>
     <button class="cart-btn" id="cartBtn" onclick="toggleCart()">
@@ -689,7 +689,6 @@
       <span>Shipping</span>
       <span id="cartShipping" style="font-style:italic;">TBD at checkout</span>
     </div>
-    <!-- SHIPPING_PLACEHOLDER: Replace the TBD span above with calculated shipping when ready -->
     <div class="cart-total-row cart-total-final">
       <span>Total</span>
       <span id="cartTotal">$0.00</span>
@@ -698,7 +697,6 @@
       💬 Ready to purchase? Contact us to arrange payment and pickup. Shipping costs will be confirmed when we process your order.
     </div>
     <button class="cart-checkout-btn" onclick="openContactModal()">Contact Us to Order</button>
-    <!-- PAYMENT_PLACEHOLDER: Replace the contact button above with Stripe checkout when payments are ready -->
     <button class="cart-clear-btn" onclick="clearCart()">Clear Cart</button>
   </div>
 </div>
@@ -766,24 +764,12 @@
   let filtered = [];
   let currentPage = 1;
 
-  // Read filters from URL params (set by pricing tier and category buttons)
   const urlParams = new URLSearchParams(window.location.search);
   const urlMin = urlParams.get('min') ? parseFloat(urlParams.get('min')) : null;
   const urlMax = urlParams.get('max') ? parseFloat(urlParams.get('max')) : null;
   const urlCategory = urlParams.get('category') || null;
 
-  // ── IMAGE LOADING ──
-  // Looks for a manual URL in several possible column names from the sheet.
-  // If found, uses it directly and skips the API entirely.
-  // Otherwise queries pokemontcg.io with progressively looser searches.
-  // A concurrency queue (max 3 at once) prevents rate-limiting on page load.
-
-  const POKE_API_HEADERS = {
-    // Add your pokemontcg.io API key here for higher rate limits:
-    // 'X-Api-Key': 'your-key-here'
-  };
-
-  // Resolve manual image URL from card row - checks several possible column names
+  // ── IMAGE LOADING (via server-side Cloudinary cache) ──
   function getManualImageUrl(card) {
     const cols = ['Image URL', 'Image', 'Photo URL', 'Photo', 'image url', 'image', 'photo url', 'photo', 'Img', 'img'];
     for (const col of cols) {
@@ -793,89 +779,19 @@
     return '';
   }
 
-  // Simple concurrency limiter - max 3 simultaneous API calls
-  let _activeRequests = 0;
-  const _requestQueue = [];
-  function withConcurrencyLimit(fn) {
-    return new Promise((resolve, reject) => {
-      const run = async () => {
-        _activeRequests++;
-        try { resolve(await fn()); }
-        catch(e) { reject(e); }
-        finally {
-          _activeRequests--;
-          if (_requestQueue.length > 0) _requestQueue.shift()();
-        }
-      };
-      if (_activeRequests < 3) run();
-      else _requestQueue.push(run);
-    });
-  }
-
-  async function pokeApiGet(url) {
-    return withConcurrencyLimit(async () => {
-      const r = await fetch(url, { headers: POKE_API_HEADERS });
-      if (r.status === 429) throw new Error('rate-limited');
-      return r.json();
-    });
-  }
-
   async function fetchCardImage(card) {
-    const name = card['Card Name'] || '';
-    const set  = card['Set'] || '';
-    const cardNum = card['Card #'] || '';
-    const cacheKey = `${name}-${cardNum}-${set}`;
-    if (imgCache[cacheKey]) return imgCache[cacheKey];
-
-    // 1. Manual URL always wins — skips API entirely
     const manualUrl = getManualImageUrl(card);
-    if (manualUrl) {
-      imgCache[cacheKey] = manualUrl;
-      return manualUrl;
-    }
+    if (manualUrl) return manualUrl;
 
-    // 2. Skip API for bundles, lots, and Japanese cards
+    const name = card['Card Name'] || '';
     if (!name || name.toLowerCase().includes('bundle') || name.toLowerCase().includes('lot')) return PLACEHOLDER_IMG;
-    if (set && (set.includes('(JP)') || set.includes('Japanese'))) return PLACEHOLDER_IMG;
 
-    // Clean name - strip trailing rarity codes and set numbers
-    const cleanName = name
-      .replace(/\s*(IR|SR|SAR|UR|RR|AR|PR|EX Card|GX Card)$/i, '')
-      .replace(/\s*\d+\/\d+$/, '')
-      .trim();
+    const set = card['Set'] || '';
+    const num = card['Card #'] || '';
+    const fullName = [name, set, num].filter(Boolean).join('_');
 
-    // Clean card number - strip total (111/116 → 111, TG11 stays TG11)
-    const cleanNum = cardNum ? cardNum.toString().split('/')[0].trim() : '';
-
-    try {
-      // 3. Name + number + set (most specific)
-      if (cleanNum && set && set !== 'Mixed' && set !== 'N/A') {
-        const q = encodeURIComponent(`name:"${cleanName}" number:${cleanNum} set.name:"${set}"`);
-        const d = await pokeApiGet(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`);
-        if (d.data && d.data.length > 0) { imgCache[cacheKey] = d.data[0].images.small; return imgCache[cacheKey]; }
-      }
-      // 4. Name + number
-      if (cleanNum) {
-        const q = encodeURIComponent(`name:"${cleanName}" number:${cleanNum}`);
-        const d = await pokeApiGet(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`);
-        if (d.data && d.data.length > 0) { imgCache[cacheKey] = d.data[0].images.small; return imgCache[cacheKey]; }
-      }
-      // 5. Name + set
-      if (set && set !== 'Mixed' && set !== 'N/A') {
-        const q = encodeURIComponent(`name:"${cleanName}" set.name:"${set}"`);
-        const d = await pokeApiGet(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`);
-        if (d.data && d.data.length > 0) { imgCache[cacheKey] = d.data[0].images.small; return imgCache[cacheKey]; }
-      }
-      // 6. Name only - last resort
-      const q = encodeURIComponent(`name:"${cleanName}"`);
-      const d = await pokeApiGet(`https://api.pokemontcg.io/v2/cards?q=${q}&pageSize=1`);
-      if (d.data && d.data.length > 0) { imgCache[cacheKey] = d.data[0].images.small; return imgCache[cacheKey]; }
-    } catch(e) {
-      console.warn('PokéAPI image fetch failed for', name, '—', e.message);
-    }
-
-    imgCache[cacheKey] = PLACEHOLDER_IMG;
-    return PLACEHOLDER_IMG;
+    // Use server-side cache via Cloudinary
+    return `/card-image/${encodeURIComponent(fullName)}`;
   }
 
   function parseCSV(text) {
@@ -895,10 +811,8 @@
       rawHeaders.forEach((h, i) => {
         obj[h] = (cols[i] || '').replace(/^"|"$/g, '').trim();
       });
-      // Flexible price - find any header with "asking" and strip non-numeric chars
       const priceKey = rawHeaders.find(h => h.toLowerCase().includes('asking'));
       obj['_price'] = priceKey ? (parseFloat(obj[priceKey].replace(/[^0-9.]/g, '')) || 0) : 0;
-      // Always expose as standard key too
       if (priceKey) obj['Asking Price ($)'] = obj[priceKey];
       return obj;
     }).filter(r => r['Card Name'] && r['Card Name'].trim() !== '');
@@ -926,7 +840,7 @@
       grid.innerHTML = `<div class="inv-empty">
         <div class="inv-empty-icon">🔍</div>
         <h3>No Cards Found</h3>
-        <p>Try adjusting your search or filters, or <a href="index.html#contact">get in touch</a> and we'll find what you're looking for.</p>
+        <p>Try adjusting your search or filters, or <a href="/#contact">get in touch</a> and we'll find what you're looking for.</p>
       </div>`;
       document.getElementById('pagination').innerHTML = '';
       return;
@@ -962,7 +876,7 @@
       </div>`;
     }).join('');
 
-    // Load images async — concurrency-limited so we don't hammer the API
+    // Load images via server cache
     slice.forEach((c, i) => {
       const idx = start + i;
       const imgEl = document.getElementById(`inv-img-${idx}`);
@@ -1006,7 +920,6 @@
     const cat = document.getElementById('invCategory').value;
     const cond = document.getElementById('invCondition').value;
 
-    // Re-filter from full allCards (respecting any URL price filter already applied)
     const baseCards = parseCSV._cache || allCards;
     filtered = baseCards.filter(c => {
       const price = c['_price'] || 0;
@@ -1031,9 +944,8 @@
     document.getElementById('invCategory').value = '';
     document.getElementById('invCondition').value = '';
     document.getElementById('invSort').value = 'name-asc';
-    // If came from a URL filter, go back to clean inventory page
     if (urlMin !== null || urlMax !== null || urlCategory) {
-      window.location.href = 'inventory.html';
+      window.location.href = 'inventory';
     } else {
       filterInventory();
     }
@@ -1045,9 +957,8 @@
       if (!res.ok) throw new Error('Failed to fetch');
       const text = await res.text();
       allCards = parseCSV(text);
-      parseCSV._cache = allCards; // cache full list for filter reuse
+      parseCSV._cache = allCards;
 
-      // Apply URL price filters from pricing tier buttons
       if (urlMin !== null || urlMax !== null) {
         allCards = allCards.filter(c => {
           const price = c['_price'] || 0;
@@ -1055,16 +966,13 @@
           if (urlMax !== null && price > urlMax) return false;
           return true;
         });
-        const label = urlMin && urlMax ? `$${urlMin} - $${urlMax}`
-          : urlMin ? `$${urlMin}+`
-          : `Under $${urlMax}`;
+        const label = urlMin && urlMax ? `$${urlMin} - $${urlMax}` : urlMin ? `$${urlMin}+` : `Under $${urlMax}`;
         const banner = document.createElement('div');
         banner.style.cssText = 'background:var(--pink-light);border:1.5px solid var(--pink);border-radius:10px;padding:0.75rem 1.2rem;margin-bottom:1rem;font-size:0.9rem;color:var(--pink);font-weight:600;display:flex;justify-content:space-between;align-items:center;';
-        banner.innerHTML = `Showing cards priced: <strong>${label}</strong> <a href="inventory.html" style="color:var(--pink);font-size:0.82rem;text-decoration:underline;">Clear filter</a>`;
+        banner.innerHTML = `Showing cards priced: <strong>${label}</strong> <a href="inventory" style="color:var(--pink);font-size:0.82rem;text-decoration:underline;">Clear filter</a>`;
         document.querySelector('.inv-main').insertBefore(banner, document.querySelector('.inv-controls'));
       }
 
-      // Apply URL category filter (e.g. from Gift Bundle button)
       if (urlCategory) {
         const catSelect = document.getElementById('invCategory');
         if (catSelect) catSelect.value = urlCategory;
@@ -1072,7 +980,7 @@
         const label = urlCategory === 'Gift Bundle' ? '🎁 Gift Bundles' : urlCategory;
         const banner = document.createElement('div');
         banner.style.cssText = 'background:var(--pink-light);border:1.5px solid var(--pink);border-radius:10px;padding:0.75rem 1.2rem;margin-bottom:1rem;font-size:0.9rem;color:var(--pink);font-weight:600;display:flex;justify-content:space-between;align-items:center;';
-        banner.innerHTML = `Showing: <strong>${label}</strong> <a href="inventory.html" style="color:var(--pink);font-size:0.82rem;text-decoration:underline;">Clear filter</a>`;
+        banner.innerHTML = `Showing: <strong>${label}</strong> <a href="inventory" style="color:var(--pink);font-size:0.82rem;text-decoration:underline;">Clear filter</a>`;
         document.querySelector('.inv-main').insertBefore(banner, document.querySelector('.inv-controls'));
       }
 
@@ -1084,7 +992,7 @@
         <div class="inv-empty">
           <div class="inv-empty-icon">⚠️</div>
           <h3>Couldn't Load Inventory</h3>
-          <p>Something went wrong fetching our inventory. Please try refreshing, or <a href="index.html#contact">get in touch</a> and we'll help you directly.</p>
+          <p>Something went wrong fetching our inventory. Please try refreshing, or <a href="/#contact">get in touch</a> and we'll help you directly.</p>
         </div>`;
       document.getElementById('invCount').textContent = '0';
     }
@@ -1093,8 +1001,6 @@
   loadInventory();
 
   // ── CART SYSTEM ──
-  // Cart persists in localStorage between visits
-  // Version bump: wipe carts saved before NaN-price fix
   const CART_VERSION = '3';
   if (localStorage.getItem('fgtcg_cart_v') !== CART_VERSION) {
     localStorage.removeItem('fgtcg_cart');
@@ -1102,9 +1008,7 @@
   }
   let cart = (JSON.parse(localStorage.getItem('fgtcg_cart') || '[]')).filter(i => { const p = parseFloat(i.price); return !isNaN(p) && p > 0; }).map(i => ({ ...i, price: parseFloat(i.price) }));
 
-  function saveCart() {
-    localStorage.setItem('fgtcg_cart', JSON.stringify(cart));
-  }
+  function saveCart() { localStorage.setItem('fgtcg_cart', JSON.stringify(cart)); }
 
   function updateCartUI() {
     const count = cart.reduce((sum, i) => sum + i.qty, 0);
@@ -1119,109 +1023,70 @@
   function addToCart(cartKey, price, btn) {
     const decoded = decodeURIComponent(cartKey).split('||');
     const name = decoded[0], set = decoded[1], num = decoded[2];
-
-    // Find card data for condition/grade info
-    const card = allCards.find(c =>
-      c['Card Name'] === name && (c['Set'] || '') === set && (c['Card #'] || '') === num
-    );
-
-    // Get the image from the card's img element in the same .inv-card container
+    const card = allCards.find(c => c['Card Name'] === name && (c['Set'] || '') === set && (c['Card #'] || '') === num);
     const cardEl = btn.closest('.inv-card');
     const imgEl = cardEl ? cardEl.querySelector('.inv-card-img') : null;
     const imgSrc = imgEl ? imgEl.src : '';
-
     const existing = cart.find(i => i.key === cartKey);
     if (existing) {
-      // Max 1 per card - single item listings only
       btn.textContent = '✓';
       btn.classList.add('added');
       setTimeout(() => { btn.textContent = '+'; btn.classList.remove('added'); }, 1000);
       return;
     } else {
       cart.push({
-        key: cartKey,
-        name: name,
-        set: set,
-        num: num,
-        price: parseFloat(price) || 0,
-        qty: 1,
+        key: cartKey, name, set, num,
+        price: parseFloat(price) || 0, qty: 1,
         condition: card ? (card['Condition'] || '') : '',
         grade: card ? (card['Grade'] || '') : '',
         img: imgSrc
       });
     }
-
-    // Visual feedback on button
     btn.textContent = '✓';
     btn.classList.add('added');
-    setTimeout(() => {
-      btn.textContent = '+';
-      btn.classList.remove('added');
-    }, 1000);
-
+    setTimeout(() => { btn.textContent = '+'; btn.classList.remove('added'); }, 1000);
     saveCart();
     updateCartUI();
   }
 
-  function removeFromCart(key) {
-    cart = cart.filter(i => i.key !== key);
-    saveCart();
-    updateCartUI();
-  }
-
-  function clearCart() {
-    cart = [];
-    saveCart();
-    updateCartUI();
-  }
+  function removeFromCart(key) { cart = cart.filter(i => i.key !== key); saveCart(); updateCartUI(); }
+  function clearCart() { cart = []; saveCart(); updateCartUI(); }
 
   function toggleCart() {
-    const sidebar = document.getElementById('cartSidebar');
-    const overlay = document.getElementById('cartOverlay');
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('open');
+    document.getElementById('cartSidebar').classList.toggle('open');
+    document.getElementById('cartOverlay').classList.toggle('open');
   }
 
   function renderCartItems() {
     const el = document.getElementById('cartItems');
     const footer = document.getElementById('cartFooter');
     if (!el) return;
-
     if (cart.length === 0) {
-      el.innerHTML = `<div class="cart-empty">
-        <div class="cart-empty-icon">🛒</div>
-        <p>Your cart is empty!</p>
-        <p style="font-size:0.82rem;margin-top:0.4rem;">Browse the inventory and hit + to add cards.</p>
-      </div>`;
+      el.innerHTML = `<div class="cart-empty"><div class="cart-empty-icon">🛒</div><p>Your cart is empty!</p></div>`;
       if (footer) footer.style.display = 'none';
       return;
     }
-
     const subtotal = cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
     const tax = subtotal * 0.05;
     const total = subtotal + tax;
-
     el.innerHTML = cart.map(item => `
       <div class="cart-item">
-        <img class="cart-item-img" src="${item.img || ''}" alt="${item.name}"
-          onerror="this.style.background='var(--pink-light)';this.src='';" />
+        <img class="cart-item-img" src="${item.img || ''}" alt="${item.name}" onerror="this.style.background='var(--pink-light)';this.src='';" />
         <div class="cart-item-info">
           <div class="cart-item-name">${item.name}</div>
           <div class="cart-item-set">${item.set}${item.num ? ' #' + item.num : ''}</div>
-          <div class="cart-item-set">${item.condition}${item.grade && item.grade !== 'N/A' ? ' · ' + item.grade : ''}${item.qty > 1 ? ' · x' + item.qty : ''}</div>
+          <div class="cart-item-set">${item.condition}${item.grade && item.grade !== 'N/A' ? ' · ' + item.grade : ''}</div>
         </div>
         <div class="cart-item-price">$${(item.price * item.qty).toFixed(2)}</div>
-        <button class="cart-item-remove" onclick="removeFromCart('${item.key}')" title="Remove">✕</button>
+        <button class="cart-item-remove" onclick="removeFromCart('${item.key}')">✕</button>
       </div>
     `).join('');
-
     document.getElementById('cartSubtotal').textContent = '$' + subtotal.toFixed(2);
     document.getElementById('cartTax').textContent = '$' + tax.toFixed(2);
     document.getElementById('cartTotal').textContent = '$' + total.toFixed(2);
     if (footer) footer.style.display = 'block';
   }
 
-  // Initialize cart on load
   updateCartUI();
 </script>
 
@@ -1230,21 +1095,12 @@
   <div class="modal-box">
     <button class="modal-close" onclick="closeContactModal()">✕</button>
     <div class="modal-title">Place Your Order</div>
-    <p class="modal-sub">Fill in your details and we'll get back to you within 24 hours to confirm your order.</p>
+    <p class="modal-sub">Fill in your details and we'll get back to you within 24 hours.</p>
     <div class="modal-form-row">
-      <div class="modal-form-group">
-        <label for="mfname">First Name *</label>
-        <input type="text" id="mfname" placeholder="Ash" />
-      </div>
-      <div class="modal-form-group">
-        <label for="mlname">Last Name</label>
-        <input type="text" id="mlname" placeholder="Ketchum" />
-      </div>
+      <div class="modal-form-group"><label for="mfname">First Name *</label><input type="text" id="mfname" placeholder="Ash" /></div>
+      <div class="modal-form-group"><label for="mlname">Last Name</label><input type="text" id="mlname" placeholder="Ketchum" /></div>
     </div>
-    <div class="modal-form-group">
-      <label for="memail">Email *</label>
-      <input type="email" id="memail" placeholder="ash@pokemoncenter.ca" />
-    </div>
+    <div class="modal-form-group"><label for="memail">Email *</label><input type="email" id="memail" placeholder="ash@pokemoncenter.ca" /></div>
     <div class="modal-form-group">
       <label for="minquiry">Inquiry Type</label>
       <select id="minquiry">
@@ -1255,39 +1111,28 @@
         <option value="Other / General question">Other / General question</option>
       </select>
     </div>
-    <div class="modal-form-group">
-      <label for="mmessage">Message *</label>
-      <textarea id="mmessage" placeholder="Tell us what you'd like to order - card name, set, condition, and any other details…"></textarea>
-    </div>
+    <div class="modal-form-group"><label for="mmessage">Message *</label><textarea id="mmessage" placeholder="Tell us what you'd like to order..."></textarea></div>
     <button class="modal-submit" id="modalSubmitBtn" onclick="handleModalSubmit()">Send Order Request →</button>
   </div>
 </div>
 
 <script>
   function openContactModal() {
-    // Pre-populate message with cart contents if cart has items
     const cartItems = cart;
     if (cartItems && cartItems.length > 0) {
       const itemList = cartItems.map(i => `• ${i.name} (${i.set} #${i.num}) — $${parseFloat(i.price).toFixed(2)}`).join('\n');
       const subtotal = cartItems.reduce((s, i) => s + parseFloat(i.price), 0);
       const tax = subtotal * 0.05;
       const total = subtotal + tax;
-      document.getElementById('mmessage').value =
-        `Hi! I'd like to order the following cards:\n\n${itemList}\n\nSubtotal: $${subtotal.toFixed(2)}\nGST (5%): $${tax.toFixed(2)}\nTotal (before shipping): $${total.toFixed(2)}\n\nPlease let me know how to proceed!`;
+      document.getElementById('mmessage').value = `Hi! I'd like to order:\n\n${itemList}\n\nSubtotal: $${subtotal.toFixed(2)}\nGST: $${tax.toFixed(2)}\nTotal: $${total.toFixed(2)}\n\nPlease let me know how to proceed!`;
       document.getElementById('minquiry').value = 'I want to place an order';
     }
     document.getElementById('contactModal').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
 
-  function closeContactModal() {
-    document.getElementById('contactModal').classList.remove('open');
-    document.body.style.overflow = '';
-  }
-
-  function handleModalOverlayClick(e) {
-    if (e.target === document.getElementById('contactModal')) closeContactModal();
-  }
+  function closeContactModal() { document.getElementById('contactModal').classList.remove('open'); document.body.style.overflow = ''; }
+  function handleModalOverlayClick(e) { if (e.target === document.getElementById('contactModal')) closeContactModal(); }
 
   async function handleModalSubmit() {
     const btn = document.getElementById('modalSubmitBtn');
@@ -1296,40 +1141,23 @@
     const email = document.getElementById('memail').value.trim();
     const inquiry = document.getElementById('minquiry').value;
     const message = document.getElementById('mmessage').value.trim();
-
     if (!fname || !email || !message) {
-      btn.textContent = 'Please fill in required fields';
-      btn.style.background = '#c0392b';
+      btn.textContent = 'Please fill in required fields'; btn.style.background = '#c0392b';
       setTimeout(() => { btn.textContent = 'Send Order Request →'; btn.style.background = ''; }, 3000);
       return;
     }
-
-    btn.textContent = 'Sending…';
-    btn.disabled = true;
-
+    btn.textContent = 'Sending…'; btn.disabled = true;
     try {
       const res = await fetch('https://formspree.io/f/xjgqovkw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ first_name: fname, last_name: lname, email: email, inquiry: inquiry, message: message })
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ first_name: fname, last_name: lname, email, inquiry, message })
       });
-
       if (res.ok) {
-        btn.textContent = '✓ Order Request Sent!';
-        btn.style.background = '#2d6a4f';
-        setTimeout(() => {
-          closeContactModal();
-          btn.textContent = 'Send Order Request →';
-          btn.style.background = '';
-          btn.disabled = false;
-        }, 3000);
-      } else {
-        throw new Error('Failed');
-      }
+        btn.textContent = '✓ Order Request Sent!'; btn.style.background = '#2d6a4f';
+        setTimeout(() => { closeContactModal(); btn.textContent = 'Send Order Request →'; btn.style.background = ''; btn.disabled = false; }, 3000);
+      } else throw new Error('Failed');
     } catch(e) {
-      btn.textContent = 'Something went wrong — please try again';
-      btn.style.background = '#c0392b';
-      btn.disabled = false;
+      btn.textContent = 'Something went wrong — please try again'; btn.style.background = '#c0392b'; btn.disabled = false;
       setTimeout(() => { btn.textContent = 'Send Order Request →'; btn.style.background = ''; }, 4000);
     }
   }
