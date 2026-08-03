@@ -142,56 +142,45 @@ def grade():
             return jsonify({'success': False, 'error': 'No image provided'}), 400
         
         file = request.files['image']
-        
-        # Read image directly from memory (Vercel has read-only filesystem)
         image_bytes = file.read()
-        
-        # Save to a temp location Vercel allows
         tmp_path = '/tmp/upload_' + secure_filename(file.filename)
+        
         with open(tmp_path, 'wb') as f:
             f.write(image_bytes)
         
         annotated_path = None
+        cropped_path = None
         
         try:
             if mode == 'manual':
-                # Get crop points
                 crop_points_json = request.form.get('crop_points')
                 if not crop_points_json:
                     return jsonify({'success': False, 'error': 'crop_points required for manual mode'}), 400
                 
                 crop_points = json.loads(crop_points_json)
-                
-                # Open image and apply manual crop
                 original_img = Image.open(tmp_path)
                 cropped_img, crop_offset = process_manual_crop(original_img, crop_points)
                 
-                # Save cropped image
                 cropped_path = '/tmp/cropped_' + secure_filename(file.filename)
                 if cropped_img.mode in ('RGBA', 'LA', 'P'):
                     cropped_img = cropped_img.convert('RGB')
                 cropped_img.save(cropped_path, 'JPEG', quality=95)
                 
-                # Run analysis on cropped image
-                result = analyser.analyse(cropped_path)
-                
-                # Clean up cropped file
-                if os.path.exists(cropped_path):
-                    os.unlink(cropped_path)
+                result = analyser.analyse(cropped_path)   # ← Analysis happens here
             else:
-                # Auto mode
-                result = analyser.analyse(tmp_path)
+                result = analyser.analyse(tmp_path)        # ← Analysis happens here
             
             if not result.success:
                 return jsonify({'success': False, 'error': result.error_msg}), 422
             
-            # Load annotated image
-            annotated_img = Image.open(result.annotated_path)
+            # ── Everything below only runs if analysis succeeded ──
+            annotated_path = result.annotated_path
+            
+            annotated_img = Image.open(annotated_path)
             annotated_b64 = pil_image_to_b64(annotated_img)
             annotated_b64_gray = pil_image_to_b64_gray(annotated_img)
             annotated_img.close()
             
-            # Build response
             s = result.surface
             c = result.centering
             e = result.edges
@@ -267,9 +256,14 @@ def grade():
             
             return jsonify(payload)
             
+        except Exception as e:
+            # ← THIS catches analyser crashes
+            logger.exception(f'Analysis error: {e}')
+            return jsonify({'success': False, 'error': f'Analysis failed: {str(e)}'}), 500
+            
         finally:
-            # Clean up
-            for path in [tmp_path, result.annotated_path if hasattr(result, 'annotated_path') and result.annotated_path else None]:
+            # ← THIS always runs (cleanup)
+            for path in [tmp_path, annotated_path, cropped_path]:
                 if path and os.path.exists(path):
                     try:
                         os.unlink(path)
@@ -277,9 +271,9 @@ def grade():
                         pass
     
     except Exception as e:
-        logger.exception(f'Error: {e}')
-        return jsonify({'success': False, 'error': str(e)}), 500
-
+        # ← THIS catches everything else
+        logger.exception(f'Server error: {e}')
+        return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
 @app.errorhandler(413)
 def too_large(e):
     return jsonify({'success': False, 'error': 'File too large. Max 16MB.'}), 413
