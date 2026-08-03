@@ -5,162 +5,81 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Card Grader - Fair Game TCG</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <style>
-    /* Use the same pink/gold theme as the main site */
     :root {
-      --pink:       #B5547A;
-      --pink-mid:   #D4789A;
-      --pink-light: #FCE4EC;
-      --peach:      #F9A86C;
-      --peach-dark: #E8864A;
-      --bg:         #FFF8F6;
-      --text:       #2D1A22;
-      --muted:      #7A5C68;
-      --white:      #FFFFFF;
+      --pink: #B5547A; --pink-mid: #D4789A; --pink-light: #FCE4EC;
+      --peach: #F9A86C; --peach-dark: #E8864A; --bg: #FFF8F6;
+      --text: #2D1A22; --muted: #7A5C68; --white: #FFFFFF;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Inter', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-    }
-    nav {
-      position: sticky; top: 0; z-index: 100;
-      background: rgba(181,84,122,0.96);
-      backdrop-filter: blur(10px);
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 5%; height: 64px;
-    }
-    .nav-logo {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 1.6rem; color: var(--white);
-      letter-spacing: 2px; text-decoration: none;
-    }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    nav { position: sticky; top: 0; z-index: 100; background: rgba(181,84,122,0.96); backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: space-between; padding: 0 5%; height: 64px; }
+    .nav-logo { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; color: var(--white); letter-spacing: 2px; text-decoration: none; }
     .nav-logo span { color: var(--peach); }
-    .nav-back {
-      color: rgba(255,255,255,0.85);
-      text-decoration: none; font-size: 0.9rem; font-weight: 500;
-    }
+    .nav-back { color: rgba(255,255,255,0.85); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
     .nav-back:hover { color: var(--peach); }
-    .grader-header {
-      background: linear-gradient(135deg, #C4607F 0%, #E08FAA 50%, #F9C4A8 100%);
-      padding: 3rem 5% 2rem; color: var(--white); text-align: center;
-    }
-    .grader-header h1 {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: clamp(2.5rem, 6vw, 4rem);
-      letter-spacing: 2px; margin-bottom: 0.5rem;
-    }
-    .grader-main {
-      max-width: 600px; margin: 2rem auto; padding: 0 1rem;
-    }
-    .version-selector {
-      display: flex; gap: 8px; margin-bottom: 1.5rem;
-    }
-    .version-btn {
-      flex: 1; padding: 10px;
-      border: 2px solid rgba(181,84,122,0.2);
-      background: var(--white);
-      color: var(--muted);
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: 600;
-      font-family: 'Inter', sans-serif;
-      transition: all 0.2s;
-    }
-    .version-btn.active {
-      border-color: var(--peach);
-      color: var(--pink);
-      background: var(--pink-light);
-    }
-    .drop-zone {
-      border: 2px dashed rgba(181,84,122,0.2);
-      border-radius: 16px;
-      padding: 40px 20px;
-      text-align: center;
-      cursor: pointer;
-      background: var(--white);
-      transition: 0.2s;
-      margin-bottom: 1rem;
-    }
+    .grader-header { background: linear-gradient(135deg, #C4607F 0%, #E08FAA 50%, #F9C4A8 100%); padding: 2.5rem 5% 2rem; color: var(--white); text-align: center; }
+    .grader-header h1 { font-family: 'Bebas Neue', sans-serif; font-size: clamp(2.5rem, 6vw, 4rem); letter-spacing: 2px; margin-bottom: 0.5rem; }
+    .grader-main { max-width: 650px; margin: 2rem auto; padding: 0 1rem; }
+    
+    .dropdown-wrap { position: relative; margin-bottom: 1.5rem; }
+    .dropdown-btn { width: 100%; padding: 12px 16px; background: var(--white); border: 2px solid rgba(181,84,122,0.2); border-radius: 10px; font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 600; color: var(--text); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .dropdown-btn:hover { border-color: var(--peach); }
+    .dropdown-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--white); border: 2px solid rgba(181,84,122,0.2); border-radius: 10px; margin-top: 4px; z-index: 50; box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+    .dropdown-menu.show { display: block; }
+    .dropdown-item { padding: 12px 16px; cursor: pointer; border-bottom: 1px solid rgba(181,84,122,0.05); }
+    .dropdown-item:hover { background: var(--pink-light); }
+    .dropdown-item.active { background: var(--pink-light); color: var(--pink); font-weight: 700; }
+    .dropdown-item .item-title { font-weight: 600; }
+    .dropdown-item .item-desc { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+    .mode-selector { display: flex; gap: 8px; margin-bottom: 1rem; }
+    .mode-btn { flex: 1; padding: 10px; border: 2px solid rgba(181,84,122,0.2); background: var(--white); color: var(--muted); border-radius: 10px; cursor: pointer; font-weight: 600; font-family: 'Inter', sans-serif; }
+    .mode-btn.active { border-color: var(--peach); color: var(--pink); background: var(--pink-light); }
+
+    .drop-zone { border: 2px dashed rgba(181,84,122,0.2); border-radius: 16px; padding: 40px 20px; text-align: center; cursor: pointer; background: var(--white); margin-bottom: 1rem; }
     .drop-zone:hover { border-color: var(--peach); background: var(--pink-light); }
     .drop-zone input { display: none; }
-    .btn-primary {
-      background: var(--pink);
-      color: white;
-      border: none;
-      padding: 14px 24px;
-      border-radius: 10px;
-      font-weight: 700;
-      font-size: 1rem;
-      cursor: pointer;
-      width: 100%;
-      font-family: 'Inter', sans-serif;
-      transition: 0.2s;
-    }
+
+    #crop-container { display: none; position: relative; background: #000; border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+    #crop-canvas { display: block; width: 100%; cursor: crosshair; touch-action: none; }
+    
+    .line-legend { display: none; background: var(--white); border: 1px solid rgba(181,84,122,0.1); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
+    .legend-title { font-size: 0.75rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; text-align: center; }
+    .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.65rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    .live-ratios { display: none; background: var(--white); border: 1px solid rgba(181,84,122,0.1); border-radius: 12px; padding: 14px; margin-bottom: 12px; text-align: center; }
+    .ratio-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ratio-card { background: var(--bg); border: 1px solid rgba(181,84,122,0.1); border-radius: 8px; padding: 10px; }
+    .ratio-label { font-size: 0.6rem; font-family: 'JetBrains Mono', monospace; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+    .ratio-values { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700; }
+    .grade-preview { text-align: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(181,84,122,0.1); }
+    .grade-preview-value { font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--pink); }
+
+    .crop-controls { display: none; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .crop-btn { flex: 1; min-width: 80px; padding: 10px; border: 2px solid rgba(181,84,122,0.2); background: var(--white); color: var(--text); border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 600; }
+    .crop-btn.primary { background: var(--pink); color: white; border-color: var(--pink); }
+    .crop-btn.success { background: #2d6a4f; color: white; border-color: #2d6a4f; }
+    .crop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary { background: var(--pink); color: white; border: none; padding: 14px 24px; border-radius: 10px; font-weight: 700; font-size: 1rem; cursor: pointer; width: 100%; font-family: 'Inter', sans-serif; }
     .btn-primary:hover:not(:disabled) { background: var(--pink-mid); }
     .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    #results {
-      display: none;
-      margin-top: 1.5rem;
-      background: var(--white);
-      border-radius: 16px;
-      padding: 1.5rem;
-      border: 1px solid rgba(181,84,122,0.1);
-    }
-    #results img {
-      max-width: 100%;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-    }
-    .grade-display {
-      text-align: center;
-      margin: 1rem 0;
-    }
-    .grade-display .score {
-      font-family: 'Bebas Neue', sans-serif;
-      font-size: 3rem;
-      color: var(--pink);
-    }
+
+    #results { display: none; margin-top: 1.5rem; background: var(--white); border-radius: 16px; padding: 1.5rem; border: 1px solid rgba(181,84,122,0.1); }
+    #results img { max-width: 100%; border-radius: 8px; margin-bottom: 1rem; }
+    .grade-display { text-align: center; margin: 1rem 0; }
+    .grade-display .score { font-family: 'Bebas Neue', sans-serif; font-size: 3rem; color: var(--pink); }
     .breakdown { margin-top: 1rem; }
-    .breakdown-row {
-      display: flex; justify-content: space-between;
-      padding: 0.5rem 0;
-      border-bottom: 1px solid rgba(181,84,122,0.1);
-    }
-    .error-box {
-      display: none;
-      background: rgba(230,57,70,0.1);
-      color: #c0392b;
-      padding: 12px;
-      border-radius: 8px;
-      margin-top: 1rem;
-    }
-    .loading {
-      display: none;
-      text-align: center;
-      padding: 2rem;
-      color: var(--muted);
-    }
-    .spinner {
-      width: 40px; height: 40px;
-      border: 3px solid var(--pink-light);
-      border-top-color: var(--pink);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 1rem;
-    }
+    .breakdown-row { display: flex; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid rgba(181,84,122,0.1); }
+    .error-box { display: none; background: rgba(230,57,70,0.1); color: #c0392b; padding: 12px; border-radius: 8px; margin-top: 1rem; }
+    .loading { display: none; text-align: center; padding: 2rem; color: var(--muted); }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--pink-light); border-top-color: var(--pink); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    footer {
-      background: var(--pink);
-      color: rgba(255,255,255,0.7);
-      text-align: center;
-      padding: 2rem 5%;
-      font-size: 0.85rem;
-      margin-top: 3rem;
-    }
+    footer { background: var(--pink); color: rgba(255,255,255,0.7); text-align: center; padding: 2rem 5%; font-size: 0.85rem; margin-top: 3rem; }
     footer a { color: var(--peach); text-decoration: none; }
   </style>
 </head>
@@ -177,174 +96,408 @@
 </div>
 
 <div class="grader-main">
-  <!-- Version Selector -->
-  <div class="version-selector">
-    <button class="version-btn active" data-version="v5" onclick="switchVersion('v5')">
-      ⚡ v5.1 (New)
+  <!-- Version Dropdown -->
+  <div class="dropdown-wrap">
+    <button class="dropdown-btn" id="versionDropdownBtn" onclick="toggleDropdown()">
+      <span id="selectedVersionLabel">⚡ PokeGrader v5.1 (New)</span>
+      <span>▾</span>
     </button>
-    <button class="version-btn" data-version="v4" onclick="switchVersion('v4')">
-      📷 v4 (Classic)
-    </button>
+    <div class="dropdown-menu" id="versionDropdown">
+      <div class="dropdown-item active" data-version="v5" onclick="selectVersion('v5', this)">
+        <div class="item-title">⚡ PokeGrader v5.1 (New)</div>
+        <div class="item-desc">Auto + 8-Line Manual centering with draggable lines</div>
+      </div>
+      <div class="dropdown-item" data-version="v4" onclick="selectVersion('v4', this)">
+        <div class="item-title">📷 PokeGrader v4 (Classic)</div>
+        <div class="item-desc">Original auto-detect analysis</div>
+      </div>
+    </div>
   </div>
 
-  <!-- Upload Area -->
+  <!-- v5.1 Mode Selector -->
+  <div class="mode-selector" id="modeSelector">
+    <button class="mode-btn active" data-mode="auto" onclick="setV5Mode('auto')">🤖 Auto</button>
+    <button class="mode-btn" data-mode="manual" onclick="setV5Mode('manual')">✋ 8-Line Manual</button>
+  </div>
+
+  <!-- Upload -->
   <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
     <input type="file" id="fileInput" accept="image/*" capture="environment" onchange="handleFileSelect(event)" />
-    <div id="uploadPrompt">
-      <div style="font-size:2.5rem;margin-bottom:0.5rem;">📷</div>
-      <div style="font-weight:600;">Tap to upload or take a photo</div>
-      <div style="font-size:0.85rem;color:var(--muted);">Card on dark background, shoot straight down</div>
-    </div>
-    <div id="fileInfo" style="display:none;">
-      <div style="font-size:1.5rem;">✅</div>
-      <div id="fileName" style="font-weight:600;"></div>
+    <div id="uploadPrompt">📷<br>Tap to upload or take a photo</div>
+    <div id="fileInfo" style="display:none;">✅<br><span id="fileName"></span></div>
+  </div>
+
+  <!-- Manual Crop Canvas -->
+  <div id="crop-container"><canvas id="crop-canvas"></canvas></div>
+  
+  <!-- 8-Line Legend -->
+  <div class="line-legend" id="lineLegend">
+    <div class="legend-title">🎨 Line Colors (drag to adjust)</div>
+    <div class="legend-grid">
+      <div class="legend-item"><div class="legend-dot" style="background:#FF00FF"></div> Left Border</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00FFFF"></div> Left Art</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF8000"></div> Right Art</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8000FF"></div> Right Border</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF0000"></div> Top Border</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00FF00"></div> Top Art</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0000FF"></div> Bottom Art</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FFFF00"></div> Bottom Border</div>
     </div>
   </div>
 
-  <button class="btn-primary" id="gradeBtn" disabled onclick="gradeCard()">
-    🔍 Grade Card
-  </button>
-
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <p>Analyzing your card...</p>
+  <!-- Live Ratios -->
+  <div class="live-ratios" id="liveRatios">
+    <div class="ratio-grid">
+      <div class="ratio-card">
+        <div class="ratio-label">L/R Centering</div>
+        <div class="ratio-values">L: <span id="lrLeft">50.0</span>% R: <span id="lrRight">50.0</span>%</div>
+      </div>
+      <div class="ratio-card">
+        <div class="ratio-label">T/B Centering</div>
+        <div class="ratio-values">T: <span id="tbTop">50.0</span>% B: <span id="tbBottom">50.0</span>%</div>
+      </div>
+    </div>
+    <div class="grade-preview">
+      Grade: <span class="grade-preview-value" id="liveGrade">Gem</span>
+    </div>
   </div>
 
+  <!-- Crop Controls -->
+  <div class="crop-controls" id="cropControls">
+    <button class="crop-btn" onclick="resetLines()">↺ Reset</button>
+    <button class="crop-btn primary" id="finishCropBtn" onclick="finishManualCrop()">✓ Analyse</button>
+  </div>
+
+  <button class="btn-primary" id="gradeBtn" disabled onclick="gradeCard()">🔍 Grade Card</button>
+
+  <div class="loading" id="loading"><div class="spinner"></div><p>Analyzing...</p></div>
   <div class="error-box" id="errorBox"></div>
 
   <div id="results">
     <img id="resultImage" src="" alt="Annotated card" />
     <div class="grade-display">
       <div class="score" id="gradeScore">--</div>
-      <div id="gradeLabel" style="color:var(--muted);">Estimated Grade</div>
-      <div id="gradeBand" style="font-size:0.85rem;color:var(--muted);margin-top:0.25rem;"></div>
+      <div id="gradeLabel">Estimated Grade</div>
+      <div id="gradeBand" style="font-size:0.85rem;color:var(--muted);"></div>
     </div>
     <div class="breakdown" id="breakdown"></div>
     <div id="recommendation" style="margin-top:1rem;padding:1rem;background:var(--pink-light);border-radius:8px;"></div>
   </div>
 </div>
 
-<footer>
-  <p><a href="/">← Back to Fair Game TCG</a> · Calgary, Alberta</p>
-</footer>
+<footer><p><a href="/">← Back to Fair Game TCG</a> · Calgary, Alberta</p></footer>
 
 <script>
-  let currentVersion = 'v5';
-  let selectedFile = null;
+  let currentVersion = 'v5', v5Mode = 'auto', selectedFile = null;
+  let cropState = { image: null, canvas: null, ctx: null, displayWidth: 0, displayHeight: 0, scaleX: 1, scaleY: 1, corners: [], borderLines: [], dragging: null, dragOffset: 0 };
+  const LINE_COLORS = { vertical: ['#FF00FF','#00FFFF','#FF8000','#8000FF'], horizontal: ['#FF0000','#00FF00','#0000FF','#FFFF00'] };
 
-  function switchVersion(version) {
-    currentVersion = version;
-    document.querySelectorAll('.version-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.version === version);
+  function toggleDropdown() { document.getElementById('versionDropdown').classList.toggle('show'); }
+  document.addEventListener('click', e => { if (!e.target.closest('.dropdown-wrap')) document.getElementById('versionDropdown').classList.remove('show'); });
+
+  function selectVersion(v, el) {
+    currentVersion = v;
+    document.querySelectorAll('.dropdown-item').forEach(d => d.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('selectedVersionLabel').textContent = el.querySelector('.item-title').textContent;
+    document.getElementById('versionDropdown').classList.remove('show');
+    document.getElementById('modeSelector').style.display = v === 'v5' ? 'flex' : 'none';
+    hideCropUI();
+    document.getElementById('results').style.display = 'none';
+  }
+
+  function setV5Mode(m) {
+    v5Mode = m;
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+    hideCropUI();
+    if (m === 'manual' && selectedFile) startManualCrop();
+    else { document.getElementById('gradeBtn').style.display = 'block'; document.getElementById('gradeBtn').disabled = !selectedFile; }
+  }
+
+  function handleFileSelect(e) {
+    const f = e.target.files[0]; if (!f) return;
+    selectedFile = f;
+    document.getElementById('uploadPrompt').style.display = 'none';
+    document.getElementById('fileInfo').style.display = 'block';
+    document.getElementById('fileName').textContent = f.name;
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    if (currentVersion === 'v5' && v5Mode === 'manual') startManualCrop();
+    else { document.getElementById('gradeBtn').style.display = 'block'; document.getElementById('gradeBtn').disabled = false; }
+  }
+
+  // ── Manual Crop with 8 Lines ──
+  function startManualCrop() {
+    if (!selectedFile) return;
+    document.getElementById('gradeBtn').style.display = 'none';
+    document.getElementById('crop-container').style.display = 'block';
+    document.getElementById('lineLegend').style.display = 'block';
+    document.getElementById('liveRatios').style.display = 'block';
+    document.getElementById('cropControls').style.display = 'flex';
+    
+    cropState.corners = [];
+    cropState.borderLines = [];
+    cropState.dragging = null;
+    
+    const img = new Image();
+    img.onload = () => {
+      cropState.image = img;
+      cropState.canvas = document.getElementById('crop-canvas');
+      cropState.ctx = cropState.canvas.getContext('2d');
+      const w = document.getElementById('crop-container').clientWidth;
+      const s = w / img.width;
+      cropState.displayWidth = w;
+      cropState.displayHeight = img.height * s;
+      cropState.scaleX = img.width / w;
+      cropState.scaleY = img.height / cropState.displayHeight;
+      cropState.canvas.width = w;
+      cropState.canvas.height = cropState.displayHeight;
+      
+      // Default border lines (8% and 12% of width/height)
+      const dw = w, dh = cropState.displayHeight;
+      cropState.borderLines = [
+        { x: dw * 0.05, group: 0 },  // left border
+        { x: dw * 0.12, group: 0 },  // left art
+        { x: dw * 0.88, group: 1 },  // right art
+        { x: dw * 0.95, group: 1 },  // right border
+        { y: dh * 0.05, group: 2 },  // top border
+        { y: dh * 0.12, group: 2 },  // top art
+        { y: dh * 0.88, group: 3 },  // bottom art
+        { y: dh * 0.95, group: 3 },  // bottom border
+      ];
+      
+      drawCropCanvas();
+      updateLiveRatios();
+    };
+    img.src = URL.createObjectURL(selectedFile);
+    
+    cropState.canvas.onmousedown = handleMouseDown;
+    cropState.canvas.onmousemove = handleMouseMove;
+    cropState.canvas.onmouseup = handleMouseUp;
+    cropState.canvas.ontouchstart = handleTouchStart;
+    cropState.canvas.ontouchmove = handleTouchMove;
+    cropState.canvas.ontouchend = handleMouseUp;
+  }
+
+  function getPos(e) {
+    const r = cropState.canvas.getBoundingClientRect();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
+    return { x: cx - r.left, y: cy - r.top };
+  }
+
+  function findNearbyLine(x, y, threshold = 15) {
+    for (let i = 0; i < cropState.borderLines.length; i++) {
+      const l = cropState.borderLines[i];
+      if (l.group < 2 && Math.abs(x - l.x) < threshold) return { type: 'line', index: i, isVert: true };
+      if (l.group >= 2 && Math.abs(y - l.y) < threshold) return { type: 'line', index: i, isVert: false };
+    }
+    // Check corners
+    for (let i = 0; i < cropState.corners.length; i++) {
+      const c = cropState.corners[i];
+      const d = Math.sqrt((x-c.x)**2 + (y-c.y)**2);
+      if (d < threshold) return { type: 'corner', index: i };
+    }
+    return null;
+  }
+
+  function handleMouseDown(e) {
+    const p = getPos(e);
+    const t = findNearbyLine(p.x, p.y);
+    if (t) {
+      cropState.dragging = t;
+      if (t.type === 'line') {
+        cropState.dragOffset = t.isVert ? p.x - cropState.borderLines[t.index].x : p.y - cropState.borderLines[t.index].y;
+      } else {
+        cropState.dragOffset = { x: p.x - cropState.corners[t.index].x, y: p.y - cropState.corners[t.index].y };
+      }
+      cropState.canvas.style.cursor = 'grabbing';
+      e.preventDefault();
+    } else if (cropState.corners.length < 4) {
+      cropState.corners.push(p);
+      drawCropCanvas();
+    }
+  }
+
+  function handleMouseMove(e) {
+    if (!cropState.dragging) {
+      const p = getPos(e);
+      cropState.canvas.style.cursor = findNearbyLine(p.x, p.y) ? 'grab' : (cropState.corners.length < 4 ? 'crosshair' : 'default');
+      return;
+    }
+    e.preventDefault();
+    const p = getPos(e);
+    if (cropState.dragging.type === 'line') {
+      const l = cropState.borderLines[cropState.dragging.index];
+      if (cropState.dragging.isVert) {
+        l.x = Math.max(0, Math.min(cropState.displayWidth, p.x - cropState.dragOffset));
+      } else {
+        l.y = Math.max(0, Math.min(cropState.displayHeight, p.y - cropState.dragOffset));
+      }
+      enforceLineOrdering(cropState.dragging.index);
+    } else {
+      const c = cropState.corners[cropState.dragging.index];
+      c.x = Math.max(0, Math.min(cropState.displayWidth, p.x - cropState.dragOffset.x));
+      c.y = Math.max(0, Math.min(cropState.displayHeight, p.y - cropState.dragOffset.y));
+    }
+    drawCropCanvas();
+    updateLiveRatios();
+  }
+
+  function handleMouseUp() { cropState.dragging = null; cropState.canvas.style.cursor = 'crosshair'; }
+
+  function handleTouchStart(e) { e.preventDefault(); handleMouseDown(e); }
+  function handleTouchMove(e) { e.preventDefault(); handleMouseMove(e); }
+
+  function enforceLineOrdering(idx) {
+    const l = cropState.borderLines[idx];
+    const group = cropState.borderLines.filter((ll, i) => ll.group === l.group).map((ll, i) => ({ line: ll, origIdx: cropState.borderLines.indexOf(ll) }));
+    if (l.group < 2) group.sort((a, b) => a.line.x - b.line.x);
+    else group.sort((a, b) => a.line.y - b.line.y);
+    for (let i = 1; i < group.length; i++) {
+      if (l.group < 2 && group[i].line.x - group[i-1].line.x < 5) group[i].line.x = group[i-1].line.x + 5;
+      if (l.group >= 2 && group[i].line.y - group[i-1].line.y < 5) group[i].line.y = group[i-1].line.y + 5;
+    }
+  }
+
+  function drawCropCanvas() {
+    const ctx = cropState.ctx, w = cropState.displayWidth, h = cropState.displayHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (cropState.image) ctx.drawImage(cropState.image, 0, 0, w, h);
+    
+    // Draw corners
+    cropState.corners.forEach((p, i) => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, 8, 0, Math.PI*2); ctx.fillStyle = '#2ec4b6'; ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Inter';
+      ctx.fillText(['TL','TR','BR','BL'][i], p.x + 14, p.y - 8);
+    });
+    if (cropState.corners.length === 4) {
+      ctx.beginPath(); ctx.moveTo(cropState.corners[0].x, cropState.corners[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(cropState.corners[i].x, cropState.corners[i].y);
+      ctx.closePath(); ctx.strokeStyle = '#2ec4b6'; ctx.lineWidth = 3; ctx.setLineDash([8,4]); ctx.stroke(); ctx.setLineDash([]);
+    }
+    
+    // Draw border lines
+    cropState.borderLines.forEach((l, i) => {
+      const isVert = l.group < 2;
+      const ci = cropState.borderLines.filter(ll => ll.group === l.group).indexOf(l);
+      const color = isVert ? LINE_COLORS.vertical[l.group * 2 + ci] : LINE_COLORS.horizontal[(l.group - 2) * 2 + ci];
+      ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash([6,4]);
+      if (isVert) { ctx.moveTo(l.x, 0); ctx.lineTo(l.x, h); }
+      else { ctx.moveTo(0, l.y); ctx.lineTo(w, l.y); }
+      ctx.stroke(); ctx.setLineDash([]);
+      // Handle
+      ctx.fillStyle = color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+      if (isVert) { roundRect(ctx, l.x-5, h/2-16, 10, 32, 5); ctx.fill(); ctx.stroke(); }
+      else { roundRect(ctx, w/2-16, l.y-5, 32, 10, 5); ctx.fill(); ctx.stroke(); }
     });
   }
 
-  function handleFileSelect(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    selectedFile = file;
-    document.getElementById('uploadPrompt').style.display = 'none';
-    document.getElementById('fileInfo').style.display = 'block';
-    document.getElementById('fileName').textContent = file.name;
-    document.getElementById('gradeBtn').disabled = false;
-    document.getElementById('results').style.display = 'none';
-    document.getElementById('errorBox').style.display = 'none';
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
+    ctx.quadraticCurveTo(x+w, y, x+w, y+r); ctx.lineTo(x+w, y+h-r);
+    ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h); ctx.lineTo(x+r, y+h);
+    ctx.quadraticCurveTo(x, y+h, x, y+h-r); ctx.lineTo(x, y+r);
+    ctx.quadraticCurveTo(x, y, x+r, y); ctx.closePath();
   }
 
-  async function gradeCard() {
+  function updateLiveRatios() {
+    const vl = cropState.borderLines.filter(l => l.group < 2).sort((a,b) => a.x-b.x);
+    const hl = cropState.borderLines.filter(l => l.group >= 2).sort((a,b) => a.y-b.y);
+    if (vl.length < 4 || hl.length < 4) return;
+    
+    const lW = Math.max(vl[1].x - vl[0].x, 1), rW = Math.max(vl[3].x - vl[2].x, 1);
+    const tW = Math.max(hl[1].y - hl[0].y, 1), bW = Math.max(hl[3].y - hl[2].y, 1);
+    const tH = lW + rW, tV = tW + bW;
+    const lrL = (lW/tH*100).toFixed(1), lrR = (rW/tH*100).toFixed(1);
+    const tbT = (tW/tV*100).toFixed(1), tbB = (bW/tV*100).toFixed(1);
+    const dev = Math.max(Math.abs(parseFloat(lrL)-50), Math.abs(parseFloat(tbT)-50));
+    
+    document.getElementById('lrLeft').textContent = lrL;
+    document.getElementById('lrRight').textContent = lrR;
+    document.getElementById('tbTop').textContent = tbT;
+    document.getElementById('tbBottom').textContent = tbB;
+    
+    let g = 'Gem'; if (dev > 2) g = 'Excellent'; if (dev > 4) g = 'Good'; if (dev > 7) g = 'Moderate'; if (dev > 11) g = 'Poor';
+    const ge = document.getElementById('liveGrade'); ge.textContent = g;
+    ge.style.color = {Gem:'#2ec4b6',Excellent:'#4a9eff',Good:'#f4a261',Moderate:'#e76f51',Poor:'#e63946'}[g] || '#000';
+  }
+
+  function resetLines() {
+    const dw = cropState.displayWidth, dh = cropState.displayHeight;
+    cropState.corners = [];
+    cropState.borderLines = [
+      { x: dw*0.05, group:0 }, { x: dw*0.12, group:0 }, { x: dw*0.88, group:1 }, { x: dw*0.95, group:1 },
+      { y: dh*0.05, group:2 }, { y: dh*0.12, group:2 }, { y: dh*0.88, group:3 }, { y: dh*0.95, group:3 }
+    ];
+    drawCropCanvas();
+    updateLiveRatios();
+  }
+
+  function finishManualCrop() {
+    if (cropState.corners.length < 4) { alert('Place 4 corner points first'); return; }
+    // Scale lines to original image coordinates
+    const lines = {
+      vertical: cropState.borderLines.filter(l => l.group < 2).sort((a,b) => a.x-b.x).map(l => Math.round(l.x * cropState.scaleX)),
+      horizontal: cropState.borderLines.filter(l => l.group >= 2).sort((a,b) => a.y-b.y).map(l => Math.round(l.y * cropState.scaleY))
+    };
+    const corners = cropState.corners.map(p => ({ x: Math.round(p.x * cropState.scaleX), y: Math.round(p.y * cropState.scaleY) }));
+    
+    hideCropUI();
+    gradeCard(corners, lines);
+  }
+
+  function hideCropUI() {
+    document.getElementById('crop-container').style.display = 'none';
+    document.getElementById('lineLegend').style.display = 'none';
+    document.getElementById('liveRatios').style.display = 'none';
+    document.getElementById('cropControls').style.display = 'none';
+    document.getElementById('gradeBtn').style.display = 'block';
+  }
+
+  // ── Grade Card ──
+  async function gradeCard(cropPoints, borderLines) {
     if (!selectedFile) return;
+    const btn = document.getElementById('gradeBtn'), loading = document.getElementById('loading');
+    const results = document.getElementById('results'), errorBox = document.getElementById('errorBox');
+    btn.disabled = true; loading.style.display = 'block'; results.style.display = 'none'; errorBox.style.display = 'none';
 
-    const btn = document.getElementById('gradeBtn');
-    const loading = document.getElementById('loading');
-    const results = document.getElementById('results');
-    const errorBox = document.getElementById('errorBox');
-
-    btn.disabled = true;
-    loading.style.display = 'block';
-    results.style.display = 'none';
-    errorBox.style.display = 'none';
-
-    const formData = new FormData();
-    formData.append('image', selectedFile);
-    formData.append('mode', 'auto');  // Both v5 and v4 use auto mode from the server
+    const fd = new FormData();
+    fd.append('image', selectedFile);
+    fd.append('mode', (currentVersion === 'v5' && v5Mode === 'manual') ? 'manual' : 'auto');
+    if (cropPoints) fd.append('crop_points', JSON.stringify(cropPoints));
+    if (borderLines) fd.append('border_lines', JSON.stringify(borderLines));
 
     try {
-      const response = await fetch('/grade', {
-        method: 'POST',
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Analysis failed');
-      }
-
-      // Display results (works for both v4 and v5.1 response formats)
-      displayResults(data);
-    } catch (error) {
-      errorBox.textContent = '⚠ ' + error.message;
+      const r = await fetch('/grade', { method: 'POST', body: fd });
+      if (!r.ok) throw new Error(`Server error (${r.status})`);
+      const d = await r.json();
+      if (!d.success) throw new Error(d.error || 'Analysis failed');
+      displayResults(d);
+    } catch(e) {
+      errorBox.textContent = '⚠ ' + e.message;
       errorBox.style.display = 'block';
     } finally {
-      btn.disabled = false;
-      loading.style.display = 'none';
+      btn.disabled = false; loading.style.display = 'none';
     }
   }
 
-  function displayResults(data) {
-    const results = document.getElementById('results');
-    results.style.display = 'block';
-
-    // Annotated image
-    document.getElementById('resultImage').src = 'data:image/jpeg;base64,' + data.annotated_image;
-
-    // Grade
-    document.getElementById('gradeScore').textContent = data.overall_score + '/100';
-    document.getElementById('gradeLabel').textContent = data.estimated_grade;
-    document.getElementById('gradeBand').textContent = data.grade_band;
-
-    // Breakdown
-    const breakdown = document.getElementById('breakdown');
-    let html = '';
-    
-    if (data.centering) {
-      html += `<div class="breakdown-row">
-        <span>📐 Centering</span>
-        <strong>${data.centering.score}/${data.centering.max_score || 25} (${data.centering.grade})</strong>
-      </div>`;
-    }
-    if (data.edges) {
-      html += `<div class="breakdown-row">
-        <span>📏 Edges</span>
-        <strong>${data.edges.score}/${data.edges.max_score || 15}</strong>
-      </div>`;
-    }
-    if (data.corners) {
-      html += `<div class="breakdown-row">
-        <span>◻ Corners</span>
-        <strong>${data.corners.score}/${data.corners.max_score || 20}</strong>
-      </div>`;
-    }
-    if (data.surface) {
-      html += `<div class="breakdown-row">
-        <span>✨ Surface</span>
-        <strong>${data.surface.score}/${data.surface.max_score || 30} (${data.surface.grade})</strong>
-      </div>`;
-    }
-
-    breakdown.innerHTML = html;
-
-    // Recommendation
-    const rec = document.getElementById('recommendation');
-    rec.innerHTML = `
-      <strong>📬 Recommendation:</strong> ${data.recommendation}<br>
-      <small style="color:var(--muted);">${data.recommendation_reason}</small>
-    `;
-
-    // Scroll to results
-    results.scrollIntoView({ behavior: 'smooth' });
+  function displayResults(d) {
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('resultImage').src = 'data:image/jpeg;base64,' + d.annotated_image;
+    document.getElementById('gradeScore').textContent = (d.overall_score || 0) + '/100';
+    document.getElementById('gradeLabel').textContent = d.estimated_grade || '--';
+    document.getElementById('gradeBand').textContent = d.grade_band || '';
+    let h = '';
+    if (d.centering) h += `<div class="breakdown-row"><span>📐 Centering</span><strong>${d.centering.score}/${d.centering.max_score||25} (${d.centering.grade})</strong></div>`;
+    if (d.edges) h += `<div class="breakdown-row"><span>📏 Edges</span><strong>${d.edges.score}/${d.edges.max_score||15}</strong></div>`;
+    if (d.corners) h += `<div class="breakdown-row"><span>◻ Corners</span><strong>${d.corners.score}/${d.corners.max_score||20}</strong></div>`;
+    if (d.surface) h += `<div class="breakdown-row"><span>✨ Surface</span><strong>${d.surface.score}/${d.surface.max_score||30} (${d.surface.grade})</strong></div>`;
+    document.getElementById('breakdown').innerHTML = h;
+    document.getElementById('recommendation').innerHTML = `<strong>📬 ${d.recommendation||'--'}</strong><br><small>${d.recommendation_reason||''}</small>${d.beckett_candidate?'<br>⭐ Beckett Black Label Candidate!':''}`;
+    document.getElementById('results').scrollIntoView({behavior:'smooth'});
   }
 </script>
-
 </body>
 </html>
