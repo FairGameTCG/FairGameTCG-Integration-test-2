@@ -11,6 +11,12 @@ from PIL import Image, UnidentifiedImageError
 from analyser import CardAnalyser, CenteringResult
 import numpy as np
 import cv2
+import requests
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+from cloudinary.utils import cloudinary_url
+from flask import redirect, Response
 
 # Configure logging
 logging.basicConfig(
@@ -27,6 +33,26 @@ app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff'}
 app.config['UPLOAD_TIMEOUT'] = 30  # seconds
 
+# Configure Cloudinary
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME', ''),
+    api_key=os.environ.get('CLOUDINARY_API_KEY', ''),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET', '')
+)
+
+# Pokédex mapping
+POKEDEX_MAP = {
+    'bulbasaur': 1, 'ivysaur': 2, 'venusaur': 3, 'charmander': 4,
+    'charizard': 6, 'squirtle': 7, 'blastoise': 9, 'pikachu': 25,
+    'raichu': 26, 'eevee': 133, 'mewtwo': 150, 'mew': 151,
+}
+
+def get_pokedex_number(card_name):
+    clean = card_name.lower().split('(')[0].strip()
+    for name, num in POKEDEX_MAP.items():
+        if name in clean:
+            return num
+    return None
 # Initialize analyser
 analyser = CardAnalyser()
 
@@ -231,6 +257,38 @@ def health():
         'modes': ['auto', 'manual'],
         'features': ['8-line manual centering', 'live ratio calculation', 'consensus border detection']
     })
+
+@app.route('/card-image/<path:card_name>')
+def get_card_image(card_name):
+    public_id = f"pokemon-cards/{card_name.replace(' ', '_').lower()[:100]}"
+    
+    try:
+        cloudinary.api.resource(public_id)
+        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+        return redirect(url)
+    except:
+        pass
+    
+    pokedex_id = get_pokedex_number(card_name)
+    
+    try:
+        if pokedex_id:
+            api_url = f'https://api.pokemontcg.io/v2/cards?q=nationalPokedexNumbers:{pokedex_id}&pageSize=1'
+        else:
+            clean = card_name.lower().split('(')[0].strip()
+            api_url = f'https://api.pokemontcg.io/v2/cards?q=name:"{clean}"&pageSize=1'
+        
+        resp = requests.get(api_url, timeout=5)
+        if resp.status_code == 200 and resp.json().get('data'):
+            img_url = resp.json()['data'][0]['images']['small']
+            cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
+            url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+            return redirect(url)
+    except:
+        pass
+    
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="280"><rect width="200" height="280" fill="#FCE4EC" rx="12"/><text x="100" y="150" text-anchor="middle" fill="#B5547A" font-size="48">🃏</text></svg>'
+    return Response(svg, mimetype='image/svg+xml')
 
 @app.route('/grade', methods=['POST'])
 def grade():
