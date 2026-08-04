@@ -17,6 +17,9 @@ import cloudinary.uploader
 import cloudinary.api
 from cloudinary.utils import cloudinary_url
 from flask import redirect, Response
+from dotenv import load_dotenv          # NEW
+
+load_dotenv()                           # NEW — loads .env locally; no-op on Render
 
 # Configure logging
 logging.basicConfig(
@@ -34,10 +37,21 @@ app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff'}
 app.config['UPLOAD_TIMEOUT'] = 30  # seconds
 
 # Configure Cloudinary
+CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME')
+CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
+CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
+
+if not all([CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET]):
+    logger.warning(
+        "Cloudinary credentials are missing — set CLOUDINARY_CLOUD_NAME, "
+        "CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET as environment variables."
+    )
+
 cloudinary.config(
-    cloud_name=os.environ.get('mjov8rmp', ''),
-    api_key=os.environ.get('224837851487556', ''),
-    api_secret=os.environ.get('wykJFpFPrTdWTGl-fMba13pZ3Q0', '')
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True                          # forces https URLs
 )
 
 # Pokédex mapping
