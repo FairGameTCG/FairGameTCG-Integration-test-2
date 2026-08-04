@@ -17,7 +17,6 @@ import cloudinary.uploader
 import cloudinary.api
 from cloudinary.utils import cloudinary_url
 from flask import redirect, Response
-from dotenv import load_dotenv          # NEW
 
 # Configure logging
 logging.basicConfig(
