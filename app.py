@@ -19,8 +19,6 @@ from cloudinary.utils import cloudinary_url
 from flask import redirect, Response
 from dotenv import load_dotenv          # NEW
 
-load_dotenv()                           # NEW — loads .env locally; no-op on Render
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
