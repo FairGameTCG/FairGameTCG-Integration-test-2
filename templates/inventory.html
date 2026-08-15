@@ -788,13 +788,17 @@
 
     const set = card['Set'] || '';
     const num = card['Card #'] || '';
-    const fullName = [name, set, num].filter(Boolean).join('_');
+    const cacheKey = [name, set, num].filter(Boolean).join('_');
 
-    if (imgCache[fullName]) return imgCache[fullName];
+    if (imgCache[cacheKey]) return imgCache[cacheKey];
 
-    // Use server-side cache via Cloudinary
-    const url = `/card-image/${encodeURIComponent(fullName)}`;
-    imgCache[fullName] = url;
+    // Use server-side cache via Cloudinary — name/set/number sent separately
+    // so the server can match the exact print instead of guessing.
+    const params = new URLSearchParams({ name });
+    if (set) params.set('set', set);
+    if (num) params.set('number', num);
+    const url = `/card-image?${params.toString()}`;
+    imgCache[cacheKey] = url;
     return url;
   }
 
