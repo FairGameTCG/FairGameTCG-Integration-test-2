@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import base64
 import tempfile
 import logging
@@ -503,6 +504,42 @@ def _sanitize_public_id(card_name):
     cleaned = re.sub(r'[^a-z0-9]+', '_', cleaned).strip('_')
     return f"pokemon-cards/{cleaned[:100]}"
 
+POKEMONTCG_API_KEY = os.environ.get('POKEMONTCG_API_KEY')
+if not POKEMONTCG_API_KEY:
+    logger.warning(
+        "POKEMONTCG_API_KEY is not set — pokemontcg.io requests will be unauthenticated "
+        "and subject to a much lower rate limit. Get a free key at https://pokemontcg.io/getStarted"
+    )
+
+def _fetch_pokemontcg(api_url, card_name, max_retries=3):
+    """GET a pokemontcg.io URL with the API key (if set) and retry on transient
+    failures (5xx, timeouts) using exponential backoff. Returns the parsed
+    JSON dict on success, or None if all retries are exhausted."""
+    headers = {'X-Api-Key': POKEMONTCG_API_KEY} if POKEMONTCG_API_KEY else {}
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.get(api_url, headers=headers, timeout=5)
+        except requests.RequestException as e:
+            logger.warning(f"pokemontcg.io request error for '{card_name}' (attempt {attempt}/{max_retries}): {e}")
+        else:
+            if resp.status_code == 200:
+                return resp.json()
+            if resp.status_code == 429:
+                logger.warning(f"pokemontcg.io rate-limited us for '{card_name}' (attempt {attempt}/{max_retries})")
+            elif 500 <= resp.status_code < 600:
+                logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}' (attempt {attempt}/{max_retries})")
+            else:
+                # 4xx other than 429 won't be fixed by retrying
+                logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}': {resp.text[:300]}")
+                return None
+
+        if attempt < max_retries:
+            time.sleep(0.3 * (2 ** (attempt - 1)))  # 0.3s, 0.6s, 1.2s...
+
+    logger.error(f"pokemontcg.io failed for '{card_name}' after {max_retries} attempts")
+    return None
+
 @app.route('/card-image/<path:card_name>')
 def get_card_image(card_name):
     public_id = _sanitize_public_id(card_name)
@@ -523,21 +560,17 @@ def get_card_image(card_name):
             clean = card_name.lower().split('(')[0].strip()
             api_url = f'https://api.pokemontcg.io/v2/cards?q=name:"{clean}"&pageSize=1'
 
-        resp = requests.get(api_url, timeout=5)
-        if resp.status_code != 200:
-            logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}': {resp.text[:300]}")
-        elif not resp.json().get('data'):
+        data = _fetch_pokemontcg(api_url, card_name)
+        if not data or not data.get('data'):
             logger.info(f"pokemontcg.io found no match for '{card_name}' (query: {api_url})")
         else:
-            img_url = resp.json()['data'][0]['images']['small']
+            img_url = data['data'][0]['images']['small']
             try:
                 cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
                 url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
                 return redirect(url)
             except Exception as e:
                 logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
-    except requests.RequestException as e:
-        logger.error(f"pokemontcg.io request failed for '{card_name}': {e}")
     except Exception as e:
         logger.error(f"Unexpected error resolving image for '{card_name}': {e}")
 
