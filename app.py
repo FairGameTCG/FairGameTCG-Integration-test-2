@@ -540,9 +540,18 @@ def _fetch_pokemontcg(api_url, card_name, max_retries=3):
     logger.error(f"pokemontcg.io failed for '{card_name}' after {max_retries} attempts")
     return None
 
-@app.route('/card-image/<path:card_name>')
-def get_card_image(card_name):
-    public_id = _sanitize_public_id(card_name)
+@app.route('/card-image')
+def get_card_image():
+    name = request.args.get('name', '').strip()
+    set_name = request.args.get('set', '').strip()
+    number = request.args.get('number', '').strip()
+
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="280"><rect width="200" height="280" fill="#FCE4EC" rx="12"/><text x="100" y="150" text-anchor="middle" fill="#B5547A" font-size="48">🃏</text></svg>'
+    if not name:
+        return Response(svg, mimetype='image/svg+xml')
+
+    cache_key = '_'.join(p for p in [name, set_name, number] if p)
+    public_id = _sanitize_public_id(cache_key)
 
     try:
         cloudinary.api.resource(public_id)
@@ -551,30 +560,40 @@ def get_card_image(card_name):
     except Exception as e:
         logger.info(f"Cloudinary cache miss for '{public_id}': {e}")
 
-    pokedex_id = get_pokedex_number(card_name)
+    clean_name = name.lower().split('(')[0].strip().replace('"', '')
+    clean_set = set_name.replace('"', '')
+    card_num = number.split('/')[0].strip() if number else ''
+
+    # Ordered from most to least specific — stop at the first query that
+    # returns a result, so we match the exact print whenever we can instead
+    # of grabbing any card that shares the Pokemon's name.
+    queries = []
+    if clean_set and card_num:
+        queries.append(f'name:"{clean_name}" set.name:"{clean_set}" number:{card_num}')
+    if clean_set:
+        queries.append(f'name:"{clean_name}" set.name:"{clean_set}"')
+    if card_num:
+        queries.append(f'name:"{clean_name}" number:{card_num}')
+    queries.append(f'name:"{clean_name}"')
 
     try:
-        if pokedex_id:
-            api_url = f'https://api.pokemontcg.io/v2/cards?q=nationalPokedexNumbers:{pokedex_id}&pageSize=1'
+        for q in queries:
+            api_url = f'https://api.pokemontcg.io/v2/cards?q={requests.utils.quote(q)}&pageSize=1'
+            data = _fetch_pokemontcg(api_url, cache_key)
+            if data and data.get('data'):
+                img_url = data['data'][0]['images']['small']
+                try:
+                    cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
+                    url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+                    return redirect(url)
+                except Exception as e:
+                    logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
+                    break  # upload failure won't be fixed by trying a looser query
         else:
-            clean = card_name.lower().split('(')[0].strip()
-            api_url = f'https://api.pokemontcg.io/v2/cards?q=name:"{clean}"&pageSize=1'
-
-        data = _fetch_pokemontcg(api_url, card_name)
-        if not data or not data.get('data'):
-            logger.info(f"pokemontcg.io found no match for '{card_name}' (query: {api_url})")
-        else:
-            img_url = data['data'][0]['images']['small']
-            try:
-                cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
-                url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
-                return redirect(url)
-            except Exception as e:
-                logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
+            logger.info(f"pokemontcg.io found no match for '{cache_key}' after trying {len(queries)} quer{'y' if len(queries)==1 else 'ies'}")
     except Exception as e:
-        logger.error(f"Unexpected error resolving image for '{card_name}': {e}")
+        logger.error(f"Unexpected error resolving image for '{cache_key}': {e}")
 
-    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="280"><rect width="200" height="280" fill="#FCE4EC" rx="12"/><text x="100" y="150" text-anchor="middle" fill="#B5547A" font-size="48">🃏</text></svg>'
     return Response(svg, mimetype='image/svg+xml')
 
 @app.route('/grade', methods=['POST'])
