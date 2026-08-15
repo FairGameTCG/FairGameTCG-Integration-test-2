@@ -790,8 +790,12 @@
     const num = card['Card #'] || '';
     const fullName = [name, set, num].filter(Boolean).join('_');
 
+    if (imgCache[fullName]) return imgCache[fullName];
+
     // Use server-side cache via Cloudinary
-    return `/card-image/${encodeURIComponent(fullName)}`;
+    const url = `/card-image/${encodeURIComponent(fullName)}`;
+    imgCache[fullName] = url;
+    return url;
   }
 
   function parseCSV(text) {
