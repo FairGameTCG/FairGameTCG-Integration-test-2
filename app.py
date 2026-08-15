@@ -1,4 +1,5 @@
 import os
+import re
 import base64
 import tempfile
 import logging
@@ -492,35 +493,51 @@ def health():
         'features': ['8-line manual centering', 'live ratio calculation', 'consensus border detection']
     })
 
+def _sanitize_public_id(card_name):
+    """Build a Cloudinary-safe public_id: no slashes, spaces, or punctuation
+    that Cloudinary would interpret as folder separators or reject outright."""
+    cleaned = card_name.strip().lower()
+    cleaned = re.sub(r'[^a-z0-9]+', '_', cleaned).strip('_')
+    return f"pokemon-cards/{cleaned[:100]}"
+
 @app.route('/card-image/<path:card_name>')
 def get_card_image(card_name):
-    public_id = f"pokemon-cards/{card_name.replace(' ', '_').lower()[:100]}"
-    
+    public_id = _sanitize_public_id(card_name)
+
     try:
         cloudinary.api.resource(public_id)
         url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
         return redirect(url)
-    except:
-        pass
-    
+    except Exception as e:
+        logger.info(f"Cloudinary cache miss for '{public_id}': {e}")
+
     pokedex_id = get_pokedex_number(card_name)
-    
+
     try:
         if pokedex_id:
             api_url = f'https://api.pokemontcg.io/v2/cards?q=nationalPokedexNumbers:{pokedex_id}&pageSize=1'
         else:
             clean = card_name.lower().split('(')[0].strip()
             api_url = f'https://api.pokemontcg.io/v2/cards?q=name:"{clean}"&pageSize=1'
-        
+
         resp = requests.get(api_url, timeout=5)
-        if resp.status_code == 200 and resp.json().get('data'):
+        if resp.status_code != 200:
+            logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}': {resp.text[:300]}")
+        elif not resp.json().get('data'):
+            logger.info(f"pokemontcg.io found no match for '{card_name}' (query: {api_url})")
+        else:
             img_url = resp.json()['data'][0]['images']['small']
-            cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
-            url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
-            return redirect(url)
-    except:
-        pass
-    
+            try:
+                cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
+                url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+                return redirect(url)
+            except Exception as e:
+                logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
+    except requests.RequestException as e:
+        logger.error(f"pokemontcg.io request failed for '{card_name}': {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error resolving image for '{card_name}': {e}")
+
     svg = '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="280"><rect width="200" height="280" fill="#FCE4EC" rx="12"/><text x="100" y="150" text-anchor="middle" fill="#B5547A" font-size="48">🃏</text></svg>'
     return Response(svg, mimetype='image/svg+xml')
 
