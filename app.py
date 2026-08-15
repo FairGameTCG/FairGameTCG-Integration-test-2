@@ -52,6 +52,9 @@ cloudinary.config(
     secure=True                          # forces https URLs
 )
 
+_masked_key = f"{CLOUDINARY_API_KEY[:4]}...{CLOUDINARY_API_KEY[-4:]}" if CLOUDINARY_API_KEY and len(CLOUDINARY_API_KEY) > 8 else CLOUDINARY_API_KEY
+logger.info(f"Cloudinary config loaded: cloud_name={CLOUDINARY_CLOUD_NAME}, api_key={_masked_key}")
+
 # Pokédex mapping
 POKEDEX_MAP = {
     # Gen 1 (1-151)
