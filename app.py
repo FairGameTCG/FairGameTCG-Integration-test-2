@@ -528,7 +528,10 @@ def _load_tcgdex_sets(lang):
         return _TCGDEX_SET_MAPS.get(lang, {})
 
 def _resolve_tcgdex_set_id(lang, set_name):
-    """Fuzzy-match a sheet 'Set' value against tcgdex's real set names for a language."""
+    """Fuzzy-match a sheet 'Set' value against tcgdex's real set names for a language.
+    If the sheet's set name mentions 'promo', only match against real promo sets —
+    otherwise a base set (e.g. 'Scarlet & Violet') can out-score the actual promo
+    set (e.g. 'SV Black Star Promos') on raw string similarity alone."""
     if not set_name:
         return None, None
     m = _load_tcgdex_sets(lang)
@@ -537,20 +540,50 @@ def _resolve_tcgdex_set_id(lang, set_name):
     key = set_name.lower()
     if key in m:
         return m[key], set_name
-    matches = difflib.get_close_matches(key, m.keys(), n=1, cutoff=0.6)
+
+    candidates = list(m.keys())
+    cutoff = 0.6
+    if 'promo' in key:
+        promo_candidates = [c for c in candidates if 'promo' in c]
+        if promo_candidates:
+            candidates = promo_candidates
+            cutoff = 0.3  # promo set names share less literal text with sheet labels
+
+    matches = difflib.get_close_matches(key, candidates, n=1, cutoff=cutoff)
     if matches:
         return m[matches[0]], matches[0]
     return None, None
 
+def _names_plausibly_match(requested_name, actual_name):
+    """Guard against confidently returning the wrong card. A resolved set/number
+    lookup is only trusted if the card name we got back actually resembles what
+    was requested — otherwise a wrong set match (or a bad sheet entry) can silently
+    hand back a completely different card."""
+    r = requested_name.lower().strip()
+    a = (actual_name or '').lower().strip()
+    if not r or not a:
+        return False
+    if r in a or a in r:
+        return True
+    return difflib.SequenceMatcher(None, r, a).ratio() >= 0.6
+
 def _fetch_tcgdex_card(lang, set_id, local_id, clean_name, cache_key):
     """Try an exact set+localId lookup first (most precise), then fall back to
-    a name search scoped to this language/set. Returns a tcgdex card dict or None."""
+    a name search scoped to this language/set. Returns (card, description) only
+    if the result's name plausibly matches what was requested — never a silent
+    wrong-card match."""
     if set_id and local_id:
         url = f'https://api.tcgdex.net/v2/{lang}/sets/{set_id}/{local_id}'
         try:
             resp = requests.get(url, timeout=5)
             if resp.status_code == 200:
-                return resp.json(), f"set-card lookup ({lang}/{set_id}/{local_id})"
+                card = resp.json()
+                if _names_plausibly_match(clean_name, card.get('name')):
+                    return card, f"set-card lookup ({lang}/{set_id}/{local_id})"
+                logger.info(
+                    f"tcgdex set-card lookup for '{cache_key}' returned '{card.get('name')}' "
+                    f"which doesn't match requested name — treating set match as wrong, discarding"
+                )
         except requests.RequestException as e:
             logger.warning(f"tcgdex set-card lookup failed for '{cache_key}' ({lang}): {e}")
 
@@ -561,7 +594,7 @@ def _fetch_tcgdex_card(lang, set_id, local_id, clean_name, cache_key):
         resp = requests.get(url, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
-            if data:
+            if data and _names_plausibly_match(clean_name, data[0].get('name')):
                 return data[0], f"name search ({lang}{', set='+set_id if set_id else ''})"
     except requests.RequestException as e:
         logger.warning(f"tcgdex name search failed for '{cache_key}' ({lang}): {e}")
@@ -618,8 +651,8 @@ def get_card_image():
     public_id = _sanitize_public_id(cache_key)
 
     try:
-        cloudinary.api.resource(public_id)
-        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+        resource_info = cloudinary.api.resource(public_id)
+        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg", version=resource_info.get('version'))[0]
         return redirect(url)
     except Exception as e:
         logger.info(f"Cloudinary cache miss for '{public_id}': {e}")
@@ -676,8 +709,8 @@ def get_card_image():
 
     logger.info(f"Match for '{cache_key}' via {match_desc}")
     try:
-        cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
-        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+        upload_result = cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True, invalidate=True)
+        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg", version=upload_result.get('version'))[0]
         return redirect(url)
     except Exception as e:
         logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
