@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import difflib
 import base64
 import tempfile
 import logging
@@ -504,11 +505,75 @@ def _sanitize_public_id(card_name):
     cleaned = re.sub(r'[^a-z0-9]+', '_', cleaned).strip('_')
     return f"pokemon-cards/{cleaned[:100]}"
 
+_TCGDEX_SET_MAPS = {}       # lang -> {normalized set name: set id}
+_TCGDEX_SET_LOAD_TIME = {}  # lang -> epoch seconds of last load
+_TCGDEX_LANGS = ['en', 'ja']  # try English sets first, then Japanese
+
+def _load_tcgdex_sets(lang):
+    """Fetch and cache tcgdex's set list for a language, refreshed daily."""
+    now = time.time()
+    if lang in _TCGDEX_SET_MAPS and now - _TCGDEX_SET_LOAD_TIME.get(lang, 0) < 86400:
+        return _TCGDEX_SET_MAPS[lang]
+    try:
+        resp = requests.get(f'https://api.tcgdex.net/v2/{lang}/sets', timeout=10)
+        resp.raise_for_status()
+        sets = resp.json()
+        m = {s['name'].lower(): s['id'] for s in sets if s.get('name')}
+        _TCGDEX_SET_MAPS[lang] = m
+        _TCGDEX_SET_LOAD_TIME[lang] = now
+        logger.info(f"Loaded {len(m)} tcgdex sets for lang={lang}")
+        return m
+    except Exception as e:
+        logger.error(f"Failed to load tcgdex sets for lang={lang}: {e}")
+        return _TCGDEX_SET_MAPS.get(lang, {})
+
+def _resolve_tcgdex_set_id(lang, set_name):
+    """Fuzzy-match a sheet 'Set' value against tcgdex's real set names for a language."""
+    if not set_name:
+        return None, None
+    m = _load_tcgdex_sets(lang)
+    if not m:
+        return None, None
+    key = set_name.lower()
+    if key in m:
+        return m[key], set_name
+    matches = difflib.get_close_matches(key, m.keys(), n=1, cutoff=0.6)
+    if matches:
+        return m[matches[0]], matches[0]
+    return None, None
+
+def _fetch_tcgdex_card(lang, set_id, local_id, clean_name, cache_key):
+    """Try an exact set+localId lookup first (most precise), then fall back to
+    a name search scoped to this language/set. Returns a tcgdex card dict or None."""
+    if set_id and local_id:
+        url = f'https://api.tcgdex.net/v2/{lang}/sets/{set_id}/{local_id}'
+        try:
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                return resp.json(), f"set-card lookup ({lang}/{set_id}/{local_id})"
+        except requests.RequestException as e:
+            logger.warning(f"tcgdex set-card lookup failed for '{cache_key}' ({lang}): {e}")
+
+    try:
+        url = f'https://api.tcgdex.net/v2/{lang}/cards?name=eq:{requests.utils.quote(clean_name)}'
+        if set_id:
+            url += f'&set.id=eq:{set_id}'
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data:
+                return data[0], f"name search ({lang}{', set='+set_id if set_id else ''})"
+    except requests.RequestException as e:
+        logger.warning(f"tcgdex name search failed for '{cache_key}' ({lang}): {e}")
+
+    return None, None
+
 POKEMONTCG_API_KEY = os.environ.get('POKEMONTCG_API_KEY')
 if not POKEMONTCG_API_KEY:
     logger.warning(
-        "POKEMONTCG_API_KEY is not set — pokemontcg.io requests will be unauthenticated "
-        "and subject to a much lower rate limit. Get a free key at https://pokemontcg.io/getStarted"
+        "POKEMONTCG_API_KEY is not set — pokemontcg.io fallback requests will be "
+        "unauthenticated and subject to a much lower rate limit. Get a free key at "
+        "https://pokemontcg.io/getStarted"
     )
 
 def _fetch_pokemontcg(api_url, card_name, max_retries=3):
@@ -530,12 +595,11 @@ def _fetch_pokemontcg(api_url, card_name, max_retries=3):
             elif 500 <= resp.status_code < 600:
                 logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}' (attempt {attempt}/{max_retries})")
             else:
-                # 4xx other than 429 won't be fixed by retrying
                 logger.warning(f"pokemontcg.io returned {resp.status_code} for '{card_name}': {resp.text[:300]}")
                 return None
 
         if attempt < max_retries:
-            time.sleep(0.3 * (2 ** (attempt - 1)))  # 0.3s, 0.6s, 1.2s...
+            time.sleep(0.3 * (2 ** (attempt - 1)))
 
     logger.error(f"pokemontcg.io failed for '{card_name}' after {max_retries} attempts")
     return None
@@ -561,43 +625,62 @@ def get_card_image():
         logger.info(f"Cloudinary cache miss for '{public_id}': {e}")
 
     clean_name = name.lower().split('(')[0].strip().replace('"', '')
-    clean_set = set_name.replace('"', '')
     card_num = number.split('/')[0].strip() if number else ''
 
-    # Ordered from most to least specific — stop at the first query that
-    # returns a result, so we match the exact print whenever we can instead
-    # of grabbing any card that shares the Pokemon's name.
-    queries = []
-    if clean_set and card_num:
-        queries.append(f'name:"{clean_name}" set.name:"{clean_set}" number:{card_num}')
-    if clean_set:
-        queries.append(f'name:"{clean_name}" set.name:"{clean_set}"')
-    if card_num:
-        queries.append(f'name:"{clean_name}" number:{card_num}')
-    queries.append(f'name:"{clean_name}"')
-
+    # 1) Primary: tcgdex, tried in English then Japanese, using an exact
+    #    set+card-number lookup whenever we can resolve the set name.
+    img_url = None
+    match_desc = None
     try:
-        for i, q in enumerate(queries, 1):
-            api_url = f'https://api.pokemontcg.io/v2/cards?q={requests.utils.quote(q)}&pageSize=1'
-            data = _fetch_pokemontcg(api_url, cache_key)
-            if data and data.get('data'):
-                matched = data['data'][0]
-                matched_set = matched.get('set', {}).get('name', '?')
-                matched_num = matched.get('number', '?')
-                logger.info(
-                    f"pokemontcg.io match for '{cache_key}' via query #{i}/{len(queries)} ({q}): "
-                    f"got '{matched.get('name')}' — {matched_set} #{matched_num}"
-                )
-                img_url = matched['images']['small']
-                try:
-                    cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
-                    url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
-                    return redirect(url)
-                except Exception as e:
-                    logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
-                    break  # upload failure won't be fixed by trying a looser query
-        else:
-            logger.info(f"pokemontcg.io found no match for '{cache_key}' after trying {len(queries)} quer{'y' if len(queries)==1 else 'ies'}")
+        for lang in _TCGDEX_LANGS:
+            set_id, matched_set_label = _resolve_tcgdex_set_id(lang, set_name)
+            card, desc = _fetch_tcgdex_card(lang, set_id, card_num, clean_name, cache_key)
+            if card and card.get('image'):
+                img_url = f"{card['image']}/high.webp"
+                match_desc = f"tcgdex {desc}: got '{card.get('name')}' — {card.get('set', {}).get('name', '?')} #{card.get('localId', '?')}"
+                break
+    except Exception as e:
+        logger.error(f"Unexpected tcgdex error for '{cache_key}': {e}")
+
+    # 2) Fallback: pokemontcg.io, only if tcgdex found nothing.
+    if not img_url:
+        clean_set = set_name.replace('"', '')
+        queries = []
+        if clean_set and card_num:
+            queries.append(f'name:"{clean_name}" set.name:"{clean_set}" number:{card_num}')
+        if clean_set:
+            queries.append(f'name:"{clean_name}" set.name:"{clean_set}"')
+        if card_num:
+            queries.append(f'name:"{clean_name}" number:{card_num}')
+        # Deliberately no name-only last resort here — a wrong guess is worse
+        # than a placeholder, and tcgdex already covers the broad case better.
+
+        try:
+            for i, q in enumerate(queries, 1):
+                api_url = f'https://api.pokemontcg.io/v2/cards?q={requests.utils.quote(q)}&pageSize=1'
+                data = _fetch_pokemontcg(api_url, cache_key)
+                if data and data.get('data'):
+                    matched = data['data'][0]
+                    img_url = matched['images']['small']
+                    match_desc = (
+                        f"pokemontcg.io fallback query #{i}/{len(queries)} ({q}): "
+                        f"got '{matched.get('name')}' — {matched.get('set', {}).get('name', '?')} #{matched.get('number', '?')}"
+                    )
+                    break
+        except Exception as e:
+            logger.error(f"Unexpected pokemontcg.io error for '{cache_key}': {e}")
+
+    if not img_url:
+        logger.info(f"No image match for '{cache_key}' from tcgdex or pokemontcg.io")
+        return Response(svg, mimetype='image/svg+xml')
+
+    logger.info(f"Match for '{cache_key}' via {match_desc}")
+    try:
+        cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
+        url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
+        return redirect(url)
+    except Exception as e:
+        logger.error(f"Cloudinary upload failed for '{public_id}' (source {img_url}): {e}")
     except Exception as e:
         logger.error(f"Unexpected error resolving image for '{cache_key}': {e}")
 
