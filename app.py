@@ -577,11 +577,18 @@ def get_card_image():
     queries.append(f'name:"{clean_name}"')
 
     try:
-        for q in queries:
+        for i, q in enumerate(queries, 1):
             api_url = f'https://api.pokemontcg.io/v2/cards?q={requests.utils.quote(q)}&pageSize=1'
             data = _fetch_pokemontcg(api_url, cache_key)
             if data and data.get('data'):
-                img_url = data['data'][0]['images']['small']
+                matched = data['data'][0]
+                matched_set = matched.get('set', {}).get('name', '?')
+                matched_num = matched.get('number', '?')
+                logger.info(
+                    f"pokemontcg.io match for '{cache_key}' via query #{i}/{len(queries)} ({q}): "
+                    f"got '{matched.get('name')}' — {matched_set} #{matched_num}"
+                )
+                img_url = matched['images']['small']
                 try:
                     cloudinary.uploader.upload(img_url, public_id=public_id, overwrite=True)
                     url = cloudinary_url(public_id, width=300, crop="fit", format="jpg")[0]
